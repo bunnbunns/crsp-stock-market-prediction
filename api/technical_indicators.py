@@ -23,7 +23,7 @@ def rsi(data, n = 14):
 """ Moving Average (MA) """
 # df, number of days
 # adds MA column to the dataframe
-def ma(data, n = 14):
+def sma(data, n = 14):
     return data.Close.rolling(n).mean()
 
 """ Exponential Moving Average (EMA) """
@@ -33,6 +33,7 @@ def ema(data, n = 50):
     k = 2/(n+2)
     return data.Close.ewm(alpha=k).mean()
 
+# df column, number of days
 # for use for other techinical indicator functions
 def ewm(col, n = 50):
     k = 2/(n+2)
@@ -41,13 +42,15 @@ def ewm(col, n = 50):
 """Moving Average Convergence - Divergence (MACD)"""
 # will use the histogram for machine learning
 # the typical emas to use are 12-day and 26-day
-# n_f = fast EMA, n_s = slow EMA, n_m=signal EMA
+# df, fast EMA, slow EMA
 def macd(data, n_f=12, n_s=26): # macd
     return np.subtract(ewm(data.Close, n_s), ewm(data.Close, n_f))
 
+# df, fast EMA, slow EMA, signal EMA
 def ma_macd(data, n_f=12, n_s=26, n_m=9): # signal line
     return ewm(macd(data, n_f, n_s), n_m)
 
+# df, fast EMA, slow EMA, signal EMA
 def diff_macd(data, n_f=12, n_s=26, n_m=9): # histogram
     return np.subtract(macd(data, n_f, n_s), ma_macd(data, n_f, n_s, n_m))
 
@@ -61,10 +64,60 @@ def ma_ppo(data, n_f=12, n_s=26, n_m=9):
 def diff_ppo(data, n_f=12, n_s=26, n_m=9): # histogram
     return np.subtract(ppo(data, n_f, n_s), ma_ppo(data, n_f, n_s, n_m))
 
+"""Stochastic Oscillator (SO)"""
+# df, number of days
+def so(data, n=14):
+    df_temp = pd.DataFrame(data[['Close', 'High', 'Low']])
+    df_temp['Low_N'] = df_temp.Low.rolling(n).min()
+    df_temp['High_N'] = df_temp.High.rolling(n).max()
+    return (data.Close-df_temp['Low_N']) / (df_temp['High_N']-df_temp['Low_N']) * 100
+
+"""Standard Deviation (SD)"""
+# df, number of days
+def sd(data, n=20):
+    return data.Close.rolling(n).std()
+
+"""Commodity Channel Index (CCI)"""
+# df, number of days
+def cci(data, n=20):
+    df_temp = pd.DataFrame(data[['Close', 'High', 'Low']])
+    df_temp['TP'] = (df_temp['High'] + df_temp['Low'] + df_temp['Close']) / 3
+    df_temp['SMA_TP'] = df_temp['TP'].rolling(n).mean()
+    df_temp['MD']  = df_temp['TP'].rolling(n).apply(lambda x: abs(x - x.mean()).mean())
+    return (df_temp['TP']-df_temp['SMA_TP']) / (0.015 * df_temp['MD'])
+
+"""Rate of Change (ROC)"""
+# df, number of days
+def roc(data, n=12):
+    return np.divide(np.subtract(data.Close, data.Close.shift(n)), data.Close.shift(n)) * 100
+
+"""On-Balance Volume (OBV)"""
+#df, number of days
+def obv(data):
+    diff = data['Close'].diff()
+    signed_vol = np.sign(diff) * data['Volume']
+
+    return signed_vol.cumsum()
+
+"""Chaikin Money Flow (CMF)"""
+#df, number of days
+def cmf(data, n=21):
+    mfm = ((data['Close'] - data['Low']) - (data['High'] - data['Close'])) / (data['High'] - data['Low'])
+    mfv = mfm * data['Volume']
+    return mfv.rolling(n).sum() / data['Volume'].rolling(n).sum()
+
+# ['RSI', 'SMA', 'EMA', 'MACD', 'PPO', 'SO', 'SD', 'CCI', 'ROC', 'OBV', 'CMF']
+
 tech_dict = {
   'RSI': rsi,
-  'MA': ma,
+  'SMA': sma,
   'EMA': ema,
   'MACD': diff_macd,
-  'PPO': diff_ppo
+  'PPO': diff_ppo,
+  'SO': so,
+  'SD': sd,
+  'CCI': cci,
+  'ROC': roc,
+  'OBV': obv,
+  'CMF': cmf
 }
