@@ -1,22 +1,23 @@
 import { useState } from 'react'
 
-const technicalIndicators = ['RSI', 'SMA', 'EMA', 'MACD', 'PPO', 'SO', 'SD'];
+const technicalIndicators = ['RSI', 'SMA', 'EMA', 'MACD', 'PPO', 'SO', 'SD', 'CCI', 'ROC', 'OBV', 'CMF'];
 
 export function TickerForm() {
-	const [accuracy, setAccuracy] = useState(0.0);
+	const [accuracy, setAccuracy] = useState([]);
 	const [techIndicators, setTechIndicators] = useState([]);
 
-	const train = (formData) => {
+	const train = (formData, e) => {
 		const ticker = formData.get("ticker");
-		fetch(`/ml/train/${ticker}/2021-01-01`, {
+		fetch(`/ml/train/${ticker}/2024-01-01`, {
 			method: 'POST',
     	headers: { 'Content-Type': 'application/json' },
     	body: JSON.stringify({ indicators: techIndicators })
 		})
 			.then(res => res.json())
 			.then(data => {
-				setAccuracy(data);
+				setAccuracy(data)
 		});
+		console.log(e)
 	}
 
 	const handleIndicators = (indicator) => {
@@ -41,10 +42,36 @@ export function TickerForm() {
 				{}
 				<h3>Enter Stock Ticker</h3><br />
 				<input name="ticker" />
-				<button>Enter</button>
+				<button type="submit">Enter</button>
 			</form>
 
-			<h3>Accuracy: {accuracy}</h3>
+			<table>
+				<thead>
+					<tr>
+						<th>Features</th>
+						<th>Accuracy</th>
+					</tr>
+				</thead>
+				<tbody>
+					{accuracy.map((data, i) => (
+						<tr key={`data${i}`}>
+							<td>{data.features.map((feature, j) => (
+								<span key={`feature${i}${j}`}>
+									{j > 0 && ", "}
+									{feature}
+								</span>
+							))}</td>
+							<td>{data.accuracy}</td>
+							<td>{data.predictions.map((prediction, j) => (
+								<span key={`prediction${i}${j}`}>
+									{j > 0 && ", "}
+									{prediction[0]}
+								</span>
+							))}</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
 		</div>
 	)
 }

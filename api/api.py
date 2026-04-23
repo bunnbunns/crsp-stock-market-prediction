@@ -1,58 +1,67 @@
 from datetime import datetime
 import yfinance as yf
 import numpy as np
-from flask import Flask
-from flask import request
-import ml_helpers as ml
+from flask import Flask, request, jsonify
 from tensorflow import keras
-from sklearn.metrics import accuracy_score
+import ml_helpers as ml
+from itertools import combinations
 
 app = Flask(__name__)
 
-@app.route('/ml/train/<ticker>/<START>', methods=['POST'])
-def train(ticker, START, END = datetime.today().strftime('%Y-%m-%d')):
+num_features = 4
+
+def filter_stocks(x):
+	if len(x) == num_features:
+		return True
+	return False
+
+@app.route('/ml/train/<ticker>/<start>', methods=['POST'])
+def train(ticker, start, end = datetime.today().strftime('%Y-%m-%d')):
 	ticker_data = yf.Ticker(ticker)
 	data = request.get_json()
 	features = data.get('indicators', [])
-	print(features)
-	df_dict = {}
 
 	if not ticker_data.info or 'symbol' not in ticker_data.info:
 			return "Error: {ticker} is not a valid ticker."
 	
 	try:
-		# get stock data
-		df = ticker_data.history(start=START, end=END)
-
-		# remove time from dates
-		df.reset_index(inplace=True)
-		df['Date'] = df.Date.dt.date
-		df.set_index('Date', inplace=True)
-		df = df.iloc[:,:-2]
-
-		df_ti = ml.add_ti_to_df(df, features)
-		df_dict = ml.add_to_dict(df_ti)
-
-		train, valid, test = ml.generate_training_data(df_dict, df_ti)
-		X_train, yR_train, yC_train = train
-		X_valid, yR_valid, yC_valid = valid
-		X_test , yR_test , yC_test  = test
+		tups = []
+		# for r in range(len(features) + 1):
+		# 	tups.extend(combinations(features, r))
+		
+		# all_combos = list(map(list, tups))
+		# feature_combos = list(filter(filter_stocks, all_combos))
+		feature_combos = list(combinations(features, num_features))
+		result = []
 
 		model = keras.models.Sequential([
-			keras.layers.Input((None, X_train.shape[2])),
-			keras.layers.LSTM(100, activation='relu', return_sequences=True),
-			keras.layers.LSTM(200, activation='relu'),
-			keras.layers.Dense(1, activation='sigmoid')])
-		model.compile(loss='binary_crossentropy', metrics=['accuracy'])
+			keras.layers.Input((None, num_features + 1)),
+			# Use fewer units and add Dropout to prevent "lazy" learning
+			keras.layers.LSTM(128, return_sequences=False), 
+			keras.layers.Dropout(0.2),
+			keras.layers.Dense(64, activation='relu'),
+			keras.layers.Dense(1)
+		])
+		optimizer = keras.optimizers.Adam(learning_rate=0.001)
+		model.compile(loss='binary_crossentropy', metrics=['accuracy'], optimizer=optimizer)
+		
+		counter = 1
+		for feature in feature_combos:
+			result_dict = {}
+			model_results = ml.train_model(ticker_data, feature, start, end, model)
+			result_dict = {
+        'features': feature,
+        'accuracy': model_results['accuracy'],
+        'predictions': model_results['predictions']
+    	}
+			result.append(result_dict)
+			print(len(result), '/', len(feature_combos))
 
-		model.fit(X_train, yC_train, validation_data=(X_valid, yC_valid))
+		result.sort(key=lambda x: x['accuracy'], reverse=True)
 
-		yC_test_pred = np.where(model.predict(X_test)>0.5, 1, 0)
-		yC_test_pred[:5]
-
-		return str(accuracy_score(yC_test, yC_test_pred))
+		return jsonify(result), 200
 
 	except Exception as e:
 		print(e)
 
-	return "boop"
+	return "there was an error"
